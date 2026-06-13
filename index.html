@@ -26,6 +26,43 @@
           transform: rotate(360deg);
         }
       }
+
+      @media (max-width: 768px) {
+        table thead {
+          display: none;
+        }
+
+        table,
+        table tbody,
+        table tr,
+        table td {
+          display: block;
+          width: 100%;
+        }
+
+        table tr {
+          margin-bottom: 16px;
+          border: 1px solid #e5e7eb;
+          border-radius: 12px;
+          padding: 12px;
+          background: white;
+        }
+
+        table td {
+          border: none;
+          padding: 6px 0;
+          white-space: normal;
+        }
+
+        table td::before {
+          content: attr(data-label);
+          font-weight: 600;
+          display: block;
+          color: #64748b;
+          margin-bottom: 4px;
+          font-size: 12px;
+        }
+      }
     </style>
   </head>
   <body class="min-h-screen bg-slate-100 p-4 md:p-8">
@@ -59,10 +96,38 @@
           Refresh Data
         </button>
       </div>
-
+      <div class="p-4 border-b bg-slate-50">
+        <select id="filterStatus" class="border rounded-lg px-3 py-2">
+          <option value="all">Semua Status</option>
+          <option value="Menunggu">Menunggu</option>
+          <option value="Disetujui">Disetujui</option>
+          <option value="Ditolak">Ditolak</option>
+        </select>
+      </div>
       <div
         class="bg-white rounded-b-2xl shadow-xl overflow-hidden border border-slate-200"
       >
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-6">
+          <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+            <p class="text-sm text-yellow-700">Menunggu</p>
+            <h2 id="countPending" class="text-2xl font-bold">0</h2>
+          </div>
+
+          <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+            <p class="text-sm text-green-700">Disetujui</p>
+            <h2 id="countApproved" class="text-2xl font-bold">0</h2>
+          </div>
+
+          <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p class="text-sm text-red-700">Ditolak</p>
+            <h2 id="countRejected" class="text-2xl font-bold">0</h2>
+          </div>
+
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <p class="text-sm text-blue-700">Total</p>
+            <h2 id="countTotal" class="text-2xl font-bold">0</h2>
+          </div>
+        </div>
         <div
           id="loadingState"
           class="flex flex-col items-center justify-center py-20"
@@ -109,12 +174,29 @@
       // =====================================================================
       const SCRIPT_URL =
         "https://script.google.com/macros/s/AKfycbzp5d3JxPVg0jq1UN6Y-Pc15kBte5_bUIL5oHpkevOLLTJAtWpDKGi0qQe1WKMuQnMV/exec";
+      const API_KEY = "AMTSILATI_2026_METAHATI";
+
+      function normalizeWhatsAppNumber(nohp) {
+        const digitsOnly = String(nohp || "").replace(/\D/g, "");
+
+        if (!digitsOnly) return "";
+        if (digitsOnly.startsWith("628")) return digitsOnly;
+        if (digitsOnly.startsWith("08")) return digitsOnly;
+        if (digitsOnly.startsWith("8")) return `0${digitsOnly}`;
+        if (digitsOnly.startsWith("62")) return digitsOnly;
+
+        return digitsOnly;
+      }
 
       // Fungsi dijalankan otomatis saat halaman dibuka
       document.addEventListener("DOMContentLoaded", loadData);
 
       // MENGAMBIL DATA DARI GOOGLE SHEETS
       async function loadData() {
+        let pending = 0;
+        let approved = 0;
+        let rejected = 0;
+
         const loading = document.getElementById("loadingState");
         const tableDiv = document.getElementById("tableContainer");
         const emptyDiv = document.getElementById("emptyState");
@@ -134,8 +216,23 @@
           } else {
             // Membalik urutan agar data terbaru ada di paling atas (baris terakhir di Sheets)
             data.reverse().forEach((item) => {
+              if (item.status === "Disetujui") {
+                approved++;
+              } else if (item.status === "Ditolak") {
+                rejected++;
+              } else {
+                pending++;
+              }
+
               const row = document.createElement("tr");
-              row.className = "hover:bg-slate-50 transition";
+              row.dataset.status = item.status;
+              if (item.status === "Disetujui") {
+                row.className = "bg-green-50 hover:bg-green-100 transition";
+              } else if (item.status === "Ditolak") {
+                row.className = "bg-red-50 hover:bg-red-100 transition";
+              } else {
+                row.className = "bg-yellow-50 hover:bg-yellow-100 transition";
+              }
 
               // Format Waktu
               const dateObj = new Date(item.timestamp);
@@ -164,16 +261,16 @@
 
               // Menyusun isi kolom (Sel)
               row.innerHTML = `
-              <td class="px-6 py-4">${wkt}</td>
-              <td class="px-6 py-4">
+              <td data-label="Waktu" class="px-6 py-4">${wkt}</td>
+              <td data-label="Nama Mahasiswa" class="px-6 py-4">
                 <div class="font-semibold text-slate-800">${item.nama}</div>
                 <div class="text-xs text-slate-500">${item.kelas} | ${item.nohp}</div>
               </td>
-              <td class="px-6 py-4">
+              <td data-label="Detail Izin" class="px-6 py-4">
                 <span class="font-medium">${item.jenisIzin}</span><br>
                 <span class="text-xs text-slate-500">Jam ke: ${item.jamMakul}</span>
               </td>
-              <td class="px-6 py-4 whitespace-normal min-w-[200px]">${item.alasan}</td>
+              <td data-label="Alasan" class="px-6 py-4 whitespace-normal min-w-[200px]">${item.alasan}</td>
               <td class="px-6 py-4 text-center">
                 <a href="${item.bukti}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs">Lihat File</a>
               </td>
@@ -212,6 +309,11 @@
             `;
               tbody.appendChild(row);
             });
+            document.getElementById("countPending").textContent = pending;
+            document.getElementById("countApproved").textContent = approved;
+            document.getElementById("countRejected").textContent = rejected;
+            document.getElementById("countTotal").textContent = data.length;
+
             tableDiv.classList.remove("hidden");
           }
         } catch (error) {
@@ -236,11 +338,14 @@
         const actionDiv = document.getElementById(`action-${rowId}`);
         actionDiv.innerHTML = `<span class="text-xs text-blue-500 font-semibold animate-pulse">Memproses...</span>`;
 
+        const normalizedNoHp = normalizeWhatsAppNumber(nohp);
+
         const payload = {
+          apiKey: API_KEY,
           action: "update_status",
           row: rowId,
           status: newStatus,
-          nohp: nohp,
+          nohp: normalizedNoHp,
           nama: nama,
         };
 
@@ -249,20 +354,50 @@
             method: "POST",
             body: JSON.stringify(payload),
           });
-          const result = await response.json();
+          const responseText = await response.text();
+          let result;
+
+          try {
+            result = JSON.parse(responseText);
+          } catch {
+            throw new Error(
+              `Respons server bukan JSON yang valid: ${responseText.slice(0, 120)}`,
+            );
+          }
 
           if (result.status === "success") {
             // Refresh ulang datanya setelah sukses
             loadData();
           } else {
-            alert("Gagal memperbarui status.");
+            alert(
+              `Gagal memperbarui status: ${result.message || "respons server tidak dikenal."}`,
+            );
             loadData(); // kembalikan tampilan
           }
         } catch (e) {
-          alert("Terjadi kesalahan jaringan.");
+          alert(`Terjadi kesalahan saat memperbarui status: ${e.message}`);
           loadData();
         }
       }
+
+      setInterval(() => {
+        loadData();
+      }, 30000);
+      document
+        .getElementById("filterStatus")
+        .addEventListener("change", function () {
+          const selected = this.value;
+
+          document.querySelectorAll("#tableBody tr").forEach((row) => {
+            const status = row.dataset.status;
+
+            if (selected === "all" || status === selected) {
+              row.style.display = "";
+            } else {
+              row.style.display = "none";
+            }
+          });
+        });
     </script>
   </body>
 </html>
