@@ -206,6 +206,46 @@
       const filterStatus = document.getElementById("filterStatus");
       const tableBody = document.getElementById("tableBody");
 
+      function getConnectionErrorMessage() {
+        if (window.location.protocol === "file:") {
+          return "Halaman admin dibuka dari file lokal. Jalankan lewat server lokal agar browser mengizinkan koneksi ke server.";
+        }
+
+        return "Tidak dapat terhubung ke server izin. Cek koneksi internet atau deployment Google Apps Script.";
+      }
+
+      async function parseJsonResponse(response) {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const responseText = await response.text();
+
+        try {
+          return JSON.parse(responseText);
+        } catch {
+          throw new Error("Respons server tidak valid.");
+        }
+      }
+
+      async function postToScript(payload) {
+        let response;
+
+        try {
+          response = await fetch(SCRIPT_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "text/plain;charset=utf-8",
+            },
+            body: JSON.stringify(payload),
+          });
+        } catch (error) {
+          throw new Error(getConnectionErrorMessage());
+        }
+
+        return parseJsonResponse(response);
+      }
+
       function normalizeWhatsAppNumber(nohp) {
         const digitsOnly = String(nohp || "").replace(/\D/g, "");
 
@@ -317,13 +357,15 @@
         tableBody.innerHTML = "";
 
         try {
-          const response = await fetch(SCRIPT_URL);
+          let response;
 
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+          try {
+            response = await fetch(SCRIPT_URL);
+          } catch (error) {
+            throw new Error(getConnectionErrorMessage());
           }
 
-          const data = await response.json();
+          const data = await parseJsonResponse(response);
 
           if (!Array.isArray(data) || data.length === 0) {
             emptyDiv.classList.remove("hidden");
@@ -334,7 +376,10 @@
             return;
           }
 
-          data.reverse().forEach((item) => {
+          data
+            .filter((item) => item && (item.nama || item.kelas || item.status))
+            .reverse()
+            .forEach((item) => {
             const normalizedStatus = normalizeStatus(item.status);
 
             if (normalizedStatus === "Disetujui") {
@@ -432,14 +477,15 @@
               <td data-label="Status" class="px-6 py-4 text-center" id="status-${rowId}">${getStatusBadge(normalizedStatus)}</td>
               <td data-label="Aksi" class="px-6 py-4 text-center">${actionCell}</td>
             `;
-            tableBody.appendChild(row);
-          });
+              tableBody.appendChild(row);
+            });
 
           document.getElementById("countPending").textContent = pending;
           document.getElementById("countApproved").textContent = approved;
           document.getElementById("countRejected").textContent = rejected;
           document.getElementById("countTotal").textContent = String(
-            data.length,
+            data.filter((item) => item && (item.nama || item.kelas || item.status))
+              .length,
           );
 
           tableDiv.classList.remove("hidden");
@@ -480,28 +526,7 @@
         };
 
         try {
-          const response = await fetch(SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const responseText = await response.text();
-          let result;
-
-          try {
-            result = JSON.parse(responseText);
-          } catch {
-            throw new Error(
-              `Respons server bukan JSON yang valid: ${responseText.slice(0, 120)}`,
-            );
-          }
+          const result = await postToScript(payload);
 
           if (result.status === "success") {
             loadData();
@@ -538,28 +563,7 @@
         };
 
         try {
-          const response = await fetch(SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const responseText = await response.text();
-          let result;
-
-          try {
-            result = JSON.parse(responseText);
-          } catch {
-            throw new Error(
-              `Respons server bukan JSON yang valid: ${responseText.slice(0, 120)}`,
-            );
-          }
+          const result = await postToScript(payload);
 
           if (result.status === "success") {
             loadData();
@@ -587,13 +591,15 @@
         }
 
         try {
-          const response = await fetch(exportUrl.toString());
+          let response;
 
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+          try {
+            response = await fetch(exportUrl.toString());
+          } catch (error) {
+            throw new Error(getConnectionErrorMessage());
           }
 
-          const result = await response.json();
+          const result = await parseJsonResponse(response);
 
           if (result.status !== "success" || !result.downloadUrl) {
             throw new Error(result.message || "Link download tidak tersedia.");
