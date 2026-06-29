@@ -15,14 +15,17 @@
         font-family: "Inter", sans-serif;
         background-color: #f3f4f6;
       }
+
       .loader {
         border-top-color: #2563eb;
         animation: spinner 1s linear infinite;
       }
+
       @keyframes spinner {
         0% {
           transform: rotate(0deg);
         }
+
         100% {
           transform: rotate(360deg);
         }
@@ -77,26 +80,50 @@
           </h1>
           <p class="text-slate-300 text-sm mt-1">Sistem Informasi Akademik</p>
         </div>
-        <button
-          onclick="loadData()"
-          class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2"
-        >
-          <svg
-            class="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <div class="flex flex-wrap gap-2 justify-end">
+          <button
+            type="button"
+            onclick="downloadExcel()"
+            class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            ></path>
-          </svg>
-          Refresh Data
-        </button>
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 4v10m0 0l-4-4m4 4l4-4M4 20h16"
+              ></path>
+            </svg>
+            Download Excel
+          </button>
+          <button
+            type="button"
+            onclick="loadData()"
+            class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              ></path>
+            </svg>
+            Refresh Data
+          </button>
+        </div>
       </div>
+
       <div class="p-4 border-b bg-slate-50">
         <select id="filterStatus" class="border rounded-lg px-3 py-2">
           <option value="all">Semua Status</option>
@@ -105,6 +132,7 @@
           <option value="Ditolak">Ditolak</option>
         </select>
       </div>
+
       <div
         class="bg-white rounded-b-2xl shadow-xl overflow-hidden border border-slate-200"
       >
@@ -129,6 +157,7 @@
             <h2 id="countTotal" class="text-2xl font-bold">0</h2>
           </div>
         </div>
+
         <div
           id="loadingState"
           class="flex flex-col items-center justify-center py-20"
@@ -170,12 +199,12 @@
     </div>
 
     <script>
-      // =====================================================================
-      // PENTING: GANTI TULISAN DI BAWAH INI DENGAN URL WEB APP GOOGLE ANDA
-      // =====================================================================
       const SCRIPT_URL =
         "https://script.google.com/macros/s/AKfycbzp5d3JxPVg0jq1UN6Y-Pc15kBte5_bUIL5oHpkevOLLTJAtWpDKGi0qQe1WKMuQnMV/exec";
       const API_KEY = "AMTSILATI_2026_METAHATI";
+      const AUTO_REFRESH_INTERVAL = 30 * 1000;
+      const filterStatus = document.getElementById("filterStatus");
+      const tableBody = document.getElementById("tableBody");
 
       function normalizeWhatsAppNumber(nohp) {
         const digitsOnly = String(nohp || "").replace(/\D/g, "");
@@ -189,10 +218,90 @@
         return digitsOnly;
       }
 
-      // Fungsi dijalankan otomatis saat halaman dibuka
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => {
+          const entities = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          };
+
+          return entities[char];
+        });
+      }
+
+      function normalizeStatus(status) {
+        return status === "Menunggu Persetujuan" ? "Menunggu" : status;
+      }
+
+      function formatTimestamp(timestamp) {
+        const dateObj = new Date(timestamp);
+
+        if (Number.isNaN(dateObj.getTime())) {
+          return "-";
+        }
+
+        return (
+          dateObj.toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "short",
+          }) +
+          " " +
+          dateObj.toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        );
+      }
+
+      function isYesterday(timestamp) {
+        const itemDate = new Date(timestamp);
+
+        if (Number.isNaN(itemDate.getTime())) {
+          return false;
+        }
+
+        const now = new Date();
+        const yesterday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 1,
+        );
+        const itemDay = new Date(
+          itemDate.getFullYear(),
+          itemDate.getMonth(),
+          itemDate.getDate(),
+        );
+
+        return itemDay.getTime() === yesterday.getTime();
+      }
+
+      function getStatusBadge(status) {
+        if (status === "Disetujui") {
+          return '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">Disetujui</span>';
+        }
+
+        if (status === "Ditolak") {
+          return '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">Ditolak</span>';
+        }
+
+        return '<span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-semibold">Menunggu</span>';
+      }
+
+      function applyFilter() {
+        const selected = filterStatus.value;
+
+        document.querySelectorAll("#tableBody tr").forEach((row) => {
+          const status = row.dataset.status;
+          row.style.display =
+            selected === "all" || status === selected ? "" : "none";
+        });
+      }
+
       document.addEventListener("DOMContentLoaded", loadData);
 
-      // MENGAMBIL DATA DARI GOOGLE SHEETS
       async function loadData() {
         let pending = 0;
         let approved = 0;
@@ -201,143 +310,163 @@
         const loading = document.getElementById("loadingState");
         const tableDiv = document.getElementById("tableContainer");
         const emptyDiv = document.getElementById("emptyState");
-        const tbody = document.getElementById("tableBody");
 
         loading.classList.remove("hidden");
         tableDiv.classList.add("hidden");
         emptyDiv.classList.add("hidden");
-        tbody.innerHTML = "";
+        tableBody.innerHTML = "";
 
         try {
           const response = await fetch(SCRIPT_URL);
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
           const data = await response.json();
 
-          if (data.length === 0) {
+          if (!Array.isArray(data) || data.length === 0) {
             emptyDiv.classList.remove("hidden");
-          } else {
-            // Membalik urutan agar data terbaru ada di paling atas (baris terakhir di Sheets)
-            data.reverse().forEach((item) => {
-              if (item.status === "Disetujui") {
-                approved++;
-              } else if (item.status === "Ditolak") {
-                rejected++;
-              } else {
-                pending++;
-              }
+            document.getElementById("countPending").textContent = "0";
+            document.getElementById("countApproved").textContent = "0";
+            document.getElementById("countRejected").textContent = "0";
+            document.getElementById("countTotal").textContent = "0";
+            return;
+          }
 
-              const row = document.createElement("tr");
-              row.dataset.status = item.status;
-              if (item.status === "Disetujui") {
-                row.className = "bg-green-50 hover:bg-green-100 transition";
-              } else if (item.status === "Ditolak") {
-                row.className = "bg-red-50 hover:bg-red-100 transition";
-              } else {
-                row.className = "bg-yellow-50 hover:bg-yellow-100 transition";
-              }
+          data.reverse().forEach((item) => {
+            const normalizedStatus = normalizeStatus(item.status);
 
-              // Format Waktu
-              const dateObj = new Date(item.timestamp);
-              const wkt =
-                dateObj.toLocaleDateString("id-ID", {
-                  day: "2-digit",
-                  month: "short",
-                }) +
-                " " +
-                dateObj.toLocaleTimeString("id-ID", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
+            if (normalizedStatus === "Disetujui") {
+              approved++;
+            } else if (normalizedStatus === "Ditolak") {
+              rejected++;
+            } else {
+              pending++;
+            }
 
-              // Format Label Status
-              let statusBadge = "";
-              if (item.status === "Disetujui")
-                statusBadge =
-                  '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">Disetujui</span>';
-              else if (item.status === "Ditolak")
-                statusBadge =
-                  '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">Ditolak</span>';
-              else
-                statusBadge =
-                  '<span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-semibold">Menunggu</span>';
+            const row = document.createElement("tr");
+            row.dataset.status = normalizedStatus;
 
-              // Menyusun isi kolom (Sel)
-              row.innerHTML = `
-              <td data-label="Waktu" class="px-6 py-4">${wkt}</td>
-              <td data-label="Nama Mahasiswa" class="px-6 py-4">
-                <div class="font-semibold text-slate-800">${item.nama}</div>
-                <div class="text-xs text-slate-500">${item.kelas} | ${item.nohp}</div>
-              </td>
-              <td data-label="Detail Izin" class="px-6 py-4">
-                <span class="font-medium">${item.jenisIzin}</span><br>
-                <span class="text-xs text-slate-500">Jam ke: ${item.jamMakul}</span>
-              </td>
-              <td data-label="Alasan" class="px-6 py-4 whitespace-normal min-w-[200px]">${item.alasan}</td>
-              <td class="px-6 py-4 text-center">
-                <a href="${item.bukti}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs">Lihat File</a>
-              </td>
-              <td class="px-6 py-4 text-center" id="status-${item.row}">${statusBadge}</td>
-              <td class="px-6 py-4 text-center">
-                ${
-                  item.status === "Menunggu Persetujuan" ||
-                  item.status === "Menunggu"
-                    ? `
-                  <div class="flex gap-2 justify-center" id="action-${item.row}">
-                   <button
-  onclick='updateStatus(
-    ${item.row},
-    "Disetujui",
-    "${item.nohp}",
-    ${JSON.stringify(item.nama)}
-  )'
-  class="bg-green-500 hover:bg-green-600 text-white p-1.5 rounded shadow" title="Setujui">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            if (normalizedStatus === "Disetujui") {
+              row.className = "bg-green-50 hover:bg-green-100 transition";
+            } else if (normalizedStatus === "Ditolak") {
+              row.className = "bg-red-50 hover:bg-red-100 transition";
+            } else {
+              row.className = "bg-yellow-50 hover:bg-yellow-100 transition";
+            }
+
+            const rowId = Number(item.row);
+            const canDelete = isYesterday(item.timestamp);
+            const buktiLink = item.bukti
+              ? `<a href="${escapeHtml(item.bukti)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline font-medium text-xs">Lihat File</a>`
+              : '<span class="text-xs text-slate-400">Tidak ada file</span>';
+
+            const statusActions =
+              normalizedStatus === "Menunggu"
+                ? `
+                  <div class="flex gap-2 justify-center" id="action-${rowId}">
+                    <button
+                      type="button"
+                      data-action="status"
+                      data-row="${rowId}"
+                      data-status="Disetujui"
+                      data-nohp="${escapeHtml(item.nohp)}"
+                      data-nama="${escapeHtml(item.nama)}"
+                      class="admin-action bg-green-500 hover:bg-green-600 text-white p-1.5 rounded shadow"
+                      title="Setujui"
+                    >
+                      <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                     </button>
-                   <button
-  onclick='updateStatus(
-    ${item.row},
-    "Ditolak",
-    "${item.nohp}",
-    ${JSON.stringify(item.nama)}
-  )'
-  class="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded shadow" title="Tolak">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    <button
+                      type="button"
+                      data-action="status"
+                      data-row="${rowId}"
+                      data-status="Ditolak"
+                      data-nohp="${escapeHtml(item.nohp)}"
+                      data-nama="${escapeHtml(item.nama)}"
+                      class="admin-action bg-red-500 hover:bg-red-600 text-white p-1.5 rounded shadow"
+                      title="Tolak"
+                    >
+                      <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
                   </div>
                 `
-                    : `<span class="text-xs text-slate-400 font-medium">Selesai</span>`
-                }
-              </td>
-            `;
-              tbody.appendChild(row);
-            });
-            document.getElementById("countPending").textContent = pending;
-            document.getElementById("countApproved").textContent = approved;
-            document.getElementById("countRejected").textContent = rejected;
-            document.getElementById("countTotal").textContent = data.length;
+                : '<span class="text-xs text-slate-400 font-medium">Selesai</span>';
 
-            tableDiv.classList.remove("hidden");
-          }
+            const deleteAction = canDelete
+              ? `
+                  <button
+                    type="button"
+                    data-action="delete"
+                    data-row="${rowId}"
+                    data-nama="${escapeHtml(item.nama)}"
+                    data-timestamp="${escapeHtml(item.timestamp)}"
+                    class="admin-action bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded shadow text-xs font-semibold"
+                    title="Hapus data kemarin"
+                  >
+                    Hapus
+                  </button>
+                `
+              : '<span class="text-[11px] text-slate-400">Hanya data kemarin</span>';
+
+            const actionCell = `
+              <div class="flex flex-wrap gap-2 justify-center items-center">
+                ${statusActions}
+                ${deleteAction}
+              </div>
+            `;
+
+            row.innerHTML = `
+              <td data-label="Waktu" class="px-6 py-4">${formatTimestamp(item.timestamp)}</td>
+              <td data-label="Nama Mahasiswa" class="px-6 py-4">
+                <div class="font-semibold text-slate-800">${escapeHtml(item.nama)}</div>
+                <div class="text-xs text-slate-500">${escapeHtml(item.kelas)} | ${escapeHtml(item.nohp)}</div>
+              </td>
+              <td data-label="Detail Izin" class="px-6 py-4">
+                <span class="font-medium">${escapeHtml(item.jenisIzin)}</span><br>
+                <span class="text-xs text-slate-500">${escapeHtml(item.jamMakul)}</span>
+              </td>
+              <td data-label="Alasan" class="px-6 py-4 whitespace-normal min-w-[200px]">${escapeHtml(item.alasan)}</td>
+              <td data-label="Bukti" class="px-6 py-4 text-center">${buktiLink}</td>
+              <td data-label="Status" class="px-6 py-4 text-center" id="status-${rowId}">${getStatusBadge(normalizedStatus)}</td>
+              <td data-label="Aksi" class="px-6 py-4 text-center">${actionCell}</td>
+            `;
+            tableBody.appendChild(row);
+          });
+
+          document.getElementById("countPending").textContent = pending;
+          document.getElementById("countApproved").textContent = approved;
+          document.getElementById("countRejected").textContent = rejected;
+          document.getElementById("countTotal").textContent = String(
+            data.length,
+          );
+
+          tableDiv.classList.remove("hidden");
+          applyFilter();
         } catch (error) {
-          alert("Gagal memuat data dari server.");
+          alert(`Gagal memuat data dari server: ${error.message}`);
           console.error(error);
         } finally {
           loading.classList.add("hidden");
         }
       }
 
-      // MENGIRIM PERINTAH UPDATE STATUS KE SERVER
       async function updateStatus(rowId, newStatus, nohp, nama) {
         const confirmMsg = newStatus === "Disetujui" ? "Setujui" : "Tolak";
         if (
           !confirm(
             `Apakah Anda yakin ingin MEN-${confirmMsg.toUpperCase()} izin dari ${nama}?`,
           )
-        )
+        ) {
           return;
+        }
 
-        // Ubah tampilan tombol sementara jadi loading
         const actionDiv = document.getElementById(`action-${rowId}`);
-        actionDiv.innerHTML = `<span class="text-xs text-blue-500 font-semibold animate-pulse">Memproses...</span>`;
+        if (actionDiv) {
+          actionDiv.innerHTML =
+            '<span class="text-xs text-blue-500 font-semibold animate-pulse">Memproses...</span>';
+        }
 
         const normalizedNoHp = normalizeWhatsAppNumber(nohp);
 
@@ -347,14 +476,22 @@
           row: rowId,
           status: newStatus,
           nohp: normalizedNoHp,
-          nama: nama,
+          nama,
         };
 
         try {
           const response = await fetch(SCRIPT_URL, {
             method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify(payload),
           });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
           const responseText = await response.text();
           let result;
 
@@ -367,38 +504,133 @@
           }
 
           if (result.status === "success") {
-            // Refresh ulang datanya setelah sukses
             loadData();
           } else {
             alert(
               `Gagal memperbarui status: ${result.message || "respons server tidak dikenal."}`,
             );
-            loadData(); // kembalikan tampilan
+            loadData();
           }
-        } catch (e) {
-          alert(`Terjadi kesalahan saat memperbarui status: ${e.message}`);
+        } catch (error) {
+          alert(`Terjadi kesalahan saat memperbarui status: ${error.message}`);
           loadData();
         }
       }
 
-      setInterval(() => {
-        loadData();
-      }, 30000);
-      document
-        .getElementById("filterStatus")
-        .addEventListener("change", function () {
-          const selected = this.value;
+      async function deleteRow(rowId, nama, timestamp) {
+        if (!isYesterday(timestamp)) {
+          alert("Hanya data izin dari hari kemarin yang boleh dihapus.");
+          return;
+        }
 
-          document.querySelectorAll("#tableBody tr").forEach((row) => {
-            const status = row.dataset.status;
+        if (
+          !confirm(
+            `Apakah Anda yakin ingin menghapus data izin kemarin milik ${nama}?`,
+          )
+        ) {
+          return;
+        }
 
-            if (selected === "all" || status === selected) {
-              row.style.display = "";
-            } else {
-              row.style.display = "none";
-            }
+        const payload = {
+          apiKey: API_KEY,
+          action: "delete_row",
+          row: rowId,
+        };
+
+        try {
+          const response = await fetch(SCRIPT_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
           });
-        });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const responseText = await response.text();
+          let result;
+
+          try {
+            result = JSON.parse(responseText);
+          } catch {
+            throw new Error(
+              `Respons server bukan JSON yang valid: ${responseText.slice(0, 120)}`,
+            );
+          }
+
+          if (result.status === "success") {
+            loadData();
+          } else {
+            alert(
+              `Gagal menghapus data: ${result.message || "respons server tidak dikenal."}`,
+            );
+            loadData();
+          }
+        } catch (error) {
+          alert(`Terjadi kesalahan saat menghapus data: ${error.message}`);
+          loadData();
+        }
+      }
+
+      async function downloadExcel() {
+        const selectedStatus = filterStatus.value;
+        const exportUrl = new URL(SCRIPT_URL);
+
+        exportUrl.searchParams.set("action", "export_excel");
+        exportUrl.searchParams.set("apiKey", API_KEY);
+
+        if (selectedStatus && selectedStatus !== "all") {
+          exportUrl.searchParams.set("status", selectedStatus);
+        }
+
+        try {
+          const response = await fetch(exportUrl.toString());
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const result = await response.json();
+
+          if (result.status !== "success" || !result.downloadUrl) {
+            throw new Error(result.message || "Link download tidak tersedia.");
+          }
+
+          window.open(result.downloadUrl, "_blank", "noopener");
+        } catch (error) {
+          alert(`Gagal menyiapkan file Excel: ${error.message}`);
+        }
+      }
+
+      tableBody.addEventListener("click", function (event) {
+        const button = event.target.closest(".admin-action");
+
+        if (!button) {
+          return;
+        }
+
+        if (button.dataset.action === "delete") {
+          deleteRow(
+            Number(button.dataset.row),
+            button.dataset.nama,
+            button.dataset.timestamp,
+          );
+          return;
+        }
+
+        updateStatus(
+          Number(button.dataset.row),
+          button.dataset.status,
+          button.dataset.nohp,
+          button.dataset.nama,
+        );
+      });
+
+      setInterval(loadData, AUTO_REFRESH_INTERVAL);
+      filterStatus.addEventListener("change", applyFilter);
     </script>
   </body>
 </html>
